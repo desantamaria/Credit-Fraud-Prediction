@@ -13,32 +13,44 @@ url = "https://credit-fraud-ml-models.onrender.com/predict"
 
 
 def prepare_input(trans_date_trans_time, cc_num, merchant, category, amt,
-                  first, last, gender, street, city, state, zip, lat, long,
-                  city_pop, job, dob, trans_num, unix_time, merch_lat,
-                  merch_long):
+      first, last, gender, street, city, state, zip, lat, long,
+      city_pop, job, dob, trans_num, unix_time, merch_lat,
+      merch_long):
 
+    # Initialize all category fields to 0
+    category_mapping = {
+        'category_food_dining': 0,
+        'category_gas_transport': 0,
+        'category_grocery_net': 0,
+        'category_grocery_pos': 0,
+        'category_health_fitness': 0,
+        'category_home': 0,
+        'category_kids_pets': 0,
+        'category_misc_net': 0,
+        'category_misc_pos': 0,
+        'category_personal_care': 0,
+        'category_shopping_net': 0,
+        'category_shopping_pos': 0,
+        'category_travel': 0
+    }
+    
+    # Map the provided category to the correct field
+    if category in category_mapping:
+        category_mapping[category] = 1
+    
+    # Prepare the input dictionary matching the required features
     input_dict = {
-        'trans_date_trans_time': trans_date_trans_time,
-        'cc_num': cc_num,
-        'merchant': merchant,
         'amt': amt,
-        'first': first,
-        'last': last,
-        'gender_M': 1 if gender == 'Male' else 0,
-        'street': street,
-        'city': city,
-        'state': state,
         'zip': zip,
         'lat': lat,
         'long': long,
-        'city_pop': city_pop,
-        'job': job,
-        'dob': dob,
-        'trans_num': trans_num,
         'unix_time': unix_time,
         'merch_lat': merch_lat,
         'merch_long': merch_long,
+        'gender_M': 1 if gender == 'Male' else 0,
+        **category_mapping  # Spread the category fields into the dictionary
     }
+    
     return input_dict
 
 
@@ -62,46 +74,34 @@ def list_results(data):
 
 
 def explain_prediction(probability, input_dict, surname):
-    prompt = f"""You are an expert data scientist at a bank, specializing in interpreting and explaining customer churn predictions. The machine learning model predicts that the customer, {surname}, has a {round(probability * 100, 1)}% chance of churning, based on the following details:
+    prompt = f"""You are an expert data scientist at a bank, specializing in interpreting and explaining credit card fraud detection predictions. The machine learning model predicts that the transaction for customer {surname} has a {round(probability * 100, 1)}% likelihood of being fraudulent, based on the following transaction details:
 
-Customer Information:
+Transaction Information:
 {input_dict}
 
-You will carefully consider that the age in the given customer info falls into one of these categories:
-    Young: Age < 30
-    Middle-Aged: 30 < Age < 45
-    Senior: 45 < Age < 60
-    Elderly: 60 < Age < 100
+Top 10 Key Factors Influencing Fraud Risk:
 
-For example, if the customer is 40 years old, you should explain that they are middle-aged. Another example, if the customer is 56 years old, you should explain that they are senior.
+    Feature                    | Importance
+    -----------------------------------------
+    Transaction Amount          | 0.608466
+    Point-of-Sale Grocery       | 0.087572
+    Transaction Time (Unix)     | 0.049365
+    Merchant Latitude           | 0.036873
+    Merchant Longitude          | 0.036654
+    Customer Latitude           | 0.032725
+    Customer Longitude          | 0.032214
+    Customer Zip Code           | 0.030951
+    Gas/Transport Category      | 0.022148
+    Online Shopping             | 0.013533
 
-Top 10 Key Factors Influencing Churn Risk:
+You will provide a clear, concise explanation of the likelihood of this transaction being fraudulent based on the individual details and the provided key features.
 
-    Feature                | Importance
-    -------------------------------------
-    AgeGroup_Senior         | 0.359508
-    NumOfProducts           | 0.112505
-    IsActiveMember          | 0.078493
-    Age                     | 0.051761
-    Geography_Germany       | 0.043180
-    Gender_Male             | 0.022967
-    Balance                 | 0.021839
-    CLV                     | 0.020594
-    Geography_Spain         | 0.017027
-    EstimatedSalary         | 0.013020
+- If the transaction's fraud likelihood is greater than 50%, explain in three sentences why it may be considered suspicious.
+- If the transaction's fraud likelihood is less than 25%, explain in three sentences why it may not be significant.
 
-Below are summary statistics for customers who churned:
-{df[df['Exited'] == 1].describe()}
+The explanation should reference the transaction's information, relevant feature importance, and general trends from previously flagged transactions. Avoid mentioning probabilities, model predictions, or technical terms such as 'machine learning models.' Instead, directly explain the prediction in a natural, human-friendly manner. For instance, highlight unusual spending patterns, discrepancies in location, or transaction amounts compared to the customer's history.
 
-You will provide a clear, concise explanation of the customer's likelihood of churning based on their individual details and the provided key features. 
-
-- If the customer's risk of churning is greater than 40%, explain in three sentences why they may be at risk of churning.
-
-- If the customer's risk of churning is less than 25%, explain in three sentences why they may not be at significant risk.
-
-The explanation should reference the customer's information, relevant feature importance, and general trends from churned customers. Avoid mentioning the churn probability, model predictions, or technical terms such as 'machine learning models' or 'top 10 features.' Instead, directly explain the prediction in a natural, human-friendly manner. Do not mention the features of the model by name, for example, "The age falls into the 'Middle-Age' category 30<Age<45.
-
- You will keep the explanation concise and limied to three sentences.
+You will keep the explanation concise and limited to three sentences.
 """
 
     print("EXPLANATION PROMPT", prompt)
@@ -158,7 +158,7 @@ if selected_transaction_option:
         street = st.text_input("Street", selected_transaction["street"])
         city = st.text_input("City", selected_transaction["city"])
         state = st.text_input("State", selected_transaction["state"])
-        zip = st.text_input("Zip Code", str(selected_transaction["zip"]))
+        zip = st.number_input("Zip Code", int(selected_transaction["zip"]))
         trans_num = st.text_input("Transaction Number",
                                   selected_transaction["trans_num"])
         unix_time = st.number_input("Unix Time",
@@ -196,72 +196,15 @@ if selected_transaction_option:
     response = requests.post(url, json=input_dict)
     if response.status_code == 200:
         result = response.json()
-        list_results(result)
+        avg_prediction, avg_probability = list_results(result)
+        explanation = explain_prediction(avg_probability, input_dict,
+                                         selected_transaction["last"])
+
+        st.markdown("---")
+
+        st.subheader('Explanation of Prediction')
+
+        st.markdown(explanation)
     else:
         st.error("Error in prediction request.")
-
-    #     age = st.number_input("Age",
-    #                           min_value=18,
-    #                           max_value=100,
-    #                           value=int(selected_customer["Age"]))
-
-    #     tenure = st.number_input("Tenure",
-    #                              min_value=0,
-    #                              max_value=50,
-    #                              value=int(selected_customer["Tenure"]))
-
-    # with col2:
-    #     balance = st.number_input("Balance",
-    #                               min_value=0.0,
-    #                               value=float(selected_customer["Balance"]))
-
-    #     num_products = st.number_input("Number of Products",
-    #                                    min_value=1,
-    #                                    max_value=10,
-    #                                    value=int(
-    #                                        selected_customer["NumOfProducts"]))
-
-    #     has_credit_card = st.checkbox("Has Credit Card",
-    #                                   value=bool(
-    #                                       selected_customer["HasCrCard"]))
-
-    #     is_active_member = st.checkbox(
-    #         "Is Active Member",
-    #         value=bool(selected_customer["IsActiveMember"]))
-
-    #     estimated_salary = st.number_input(
-    #         "Estimated Salary",
-    #         min_value=0.0,
-    #         value=float(selected_customer["EstimatedSalary"]))
-
-    # input_dict = prepare_input(credit_score, location, gender, age, tenure,
-    #                            balance, num_products, has_credit_card,
-    #                            is_active_member, estimated_salary)
-
-    # response = requests.post(url, json=input_dict)
-
-    # if response.status_code == 200:
-    #     result = response.json()
-
-    #     avg_prediction, avg_probability = list_results(result)
-
-    #     explanation = explain_prediction(avg_probability, input_dict,
-    #                                      selected_customer["Surname"])
-
-    #     st.markdown("---")
-
-    #     st.subheader('Explanation of Prediction')
-
-    #     st.markdown(explanation)
-
-    #     email = generate_email(avg_probability, input_dict, explanation,
-    #                            selected_customer["Surname"])
-
-    #     st.markdown("---")
-
-    #     st.subheader("Personalized Email")
-
-    #     st.markdown(email)
-
-    # else:
-    #     print("Error:", response.status_code, response.text)
+        print("Error:", response.status_code, response.text)
