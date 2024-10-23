@@ -150,7 +150,9 @@ if selected_transaction_option:
             "Health & Fitness", "Home", "Kids & Pets", "Misc Net", "Misc Pos",
             "Personal Care", "Shopping Net", "Shopping Pos", "Travel"
         ],
-                                index=["personal_care", "gas_transport"].index(
+                                index=["food_dining", "gas_transport", "grocery_net", "grocery_pos",
+                                      "health_fitness", "home", "kids_pets", "misc_net", "misc_pos",
+                                      "personal_care", "shopping_net", "shopping_pos", "travel"].index(
                                     selected_transaction["category"]))
 
         amt = st.number_input("Amount",
